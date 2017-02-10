@@ -48,8 +48,6 @@ public:
 
 private:
     virtual EGLSurface eglSurfaceForPlatformSurface(QPlatformSurface *surface);
-
-    static bool needsFBOReadBackWorkaround();
 };
 
 QT_END_NAMESPACE
