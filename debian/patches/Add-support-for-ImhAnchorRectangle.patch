@@ -1,0 +1,197 @@
+From 0bb645b1ccc5a9d57b21cf0b2c4306b8e48c611c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Jan=20Arve=20S=C3=A6ther?=
+ <jan-arve.saether@theqtcompany.com>
+Date: Thu, 26 Nov 2015 10:37:24 +0100
+Subject: [PATCH] Add support for ImhAnchorRectangle
+
+Adds the following API:
+
+ * QInputMethod::anchorRectangle()
+ * QPlatformInputContext::setSelectionOnFocusObject()
+
+This will be used for determining how to display selection handles.
+
+Change-Id: If57e3fd58ff0f1ba7899f7dd62bfa9c006028667
+Reviewed-by: Richard Moe Gustavsen <richard.gustavsen@theqtcompany.com>
+---
+ src/corelib/global/qnamespace.h          |  1 +
+ src/gui/kernel/qinputmethod.cpp          | 40 ++++++++++++++++++++++++--------
+ src/gui/kernel/qinputmethod.h            |  3 +++
+ src/gui/kernel/qplatforminputcontext.cpp | 27 +++++++++++++++++++++
+ src/gui/kernel/qplatforminputcontext.h   |  2 ++
+ 5 files changed, 63 insertions(+), 10 deletions(-)
+
+diff --git a/src/corelib/global/qnamespace.h b/src/corelib/global/qnamespace.h
+index 1a3536d45b..39ca6dcd3e 100644
+--- a/src/corelib/global/qnamespace.h
++++ b/src/corelib/global/qnamespace.h
+@@ -1338,6 +1338,7 @@ public:
+         ImTextBeforeCursor = 0x800,
+         ImTextAfterCursor = 0x1000,
+         ImEnterKeyType = 0x2000,
++        ImAnchorRectangle = 0x4000,
+ 
+         ImPlatformData = 0x80000000,
+         ImQueryInput = ImCursorRectangle | ImCursorPosition | ImSurroundingText |
+diff --git a/src/gui/kernel/qinputmethod.cpp b/src/gui/kernel/qinputmethod.cpp
+index ca988f2523..b81e166d3a 100644
+--- a/src/gui/kernel/qinputmethod.cpp
++++ b/src/gui/kernel/qinputmethod.cpp
+@@ -97,6 +97,7 @@ void QInputMethod::setInputItemTransform(const QTransform &transform)
+ 
+     d->inputItemTransform = transform;
+     emit cursorRectangleChanged();
++    emit anchorRectangleChanged();
+ }
+ 
+ 
+@@ -126,6 +127,19 @@ void QInputMethod::setInputItemRectangle(const QRectF &rect)
+     d->inputRectangle = rect;
+ }
+ 
++static QRectF inputMethodQueryRectangle_helper(Qt::InputMethodQuery imquery, const QTransform &xform)
++{
++    QRectF r;
++    if (QObject *focusObject = qGuiApp->focusObject()) {
++        QInputMethodQueryEvent query(imquery);
++        QGuiApplication::sendEvent(focusObject, &query);
++        r = query.value(imquery).toRectF();
++        if (r.isValid())
++            r = xform.mapRect(r);
++    }
++    return r;
++}
++
+ /*!
+     \property QInputMethod::cursorRectangle
+     \brief Input item's cursor rectangle in window coordinates.
+@@ -136,18 +150,20 @@ void QInputMethod::setInputItemRectangle(const QRectF &rect)
+ QRectF QInputMethod::cursorRectangle() const
+ {
+     Q_D(const QInputMethod);
++    return inputMethodQueryRectangle_helper(Qt::ImCursorRectangle, d->inputItemTransform);
++}
+ 
+-    QObject *focusObject = qGuiApp->focusObject();
+-    if (!focusObject)
+-        return QRectF();
+-
+-    QInputMethodQueryEvent query(Qt::ImCursorRectangle);
+-    QGuiApplication::sendEvent(focusObject, &query);
+-    QRectF r = query.value(Qt::ImCursorRectangle).toRectF();
+-    if (!r.isValid())
+-        return QRectF();
++/*!
++    \property QInputMethod::anchorRectangle
++    \brief Input item's anchor rectangle in window coordinates.
+ 
+-    return d->inputItemTransform.mapRect(r);
++    Anchor rectangle is often used by various text editing controls
++    like text prediction popups for following the text selection.
++*/
++QRectF QInputMethod::anchorRectangle() const
++{
++    Q_D(const QInputMethod);
++    return inputMethodQueryRectangle_helper(Qt::ImAnchorRectangle, d->inputItemTransform);
+ }
+ 
+ /*!
+@@ -300,6 +316,10 @@ void QInputMethod::update(Qt::InputMethodQueries queries)
+ 
+     if (queries & Qt::ImCursorRectangle)
+         emit cursorRectangleChanged();
++
++    if (queries & (Qt::ImAnchorRectangle))
++        emit anchorRectangleChanged();
++
+ }
+ 
+ /*!
+diff --git a/src/gui/kernel/qinputmethod.h b/src/gui/kernel/qinputmethod.h
+index 68dc679d14..22e4677eaa 100644
+--- a/src/gui/kernel/qinputmethod.h
++++ b/src/gui/kernel/qinputmethod.h
+@@ -55,6 +55,7 @@ class Q_GUI_EXPORT QInputMethod : public QObject
+     Q_OBJECT
+     Q_DECLARE_PRIVATE(QInputMethod)
+     Q_PROPERTY(QRectF cursorRectangle READ cursorRectangle NOTIFY cursorRectangleChanged)
++    Q_PROPERTY(QRectF anchorRectangle READ anchorRectangle NOTIFY anchorRectangleChanged)
+     Q_PROPERTY(QRectF keyboardRectangle READ keyboardRectangle NOTIFY keyboardRectangleChanged)
+     Q_PROPERTY(bool visible READ isVisible NOTIFY visibleChanged)
+     Q_PROPERTY(bool animating READ isAnimating NOTIFY animatingChanged)
+@@ -70,6 +71,7 @@ public:
+ 
+     // in window coordinates
+     QRectF cursorRectangle() const; // ### what if we have rotations for the item?
++    QRectF anchorRectangle() const; // ### ditto
+ 
+     // keyboard geometry in window coords
+     QRectF keyboardRectangle() const;
+@@ -102,6 +104,7 @@ public Q_SLOTS:
+ 
+ Q_SIGNALS:
+     void cursorRectangleChanged();
++    void anchorRectangleChanged();
+     void keyboardRectangleChanged();
+     void visibleChanged();
+     void animatingChanged();
+diff --git a/src/gui/kernel/qplatforminputcontext.cpp b/src/gui/kernel/qplatforminputcontext.cpp
+index bad6422cb8..3f59116e9a 100644
+--- a/src/gui/kernel/qplatforminputcontext.cpp
++++ b/src/gui/kernel/qplatforminputcontext.cpp
+@@ -43,6 +43,8 @@
+ #include "private/qkeymapper_p.h"
+ #include <qpa/qplatforminputcontext_p.h>
+ 
++#include <QtGui/qtransform.h>
++
+ QT_BEGIN_NAMESPACE
+ 
+ /*!
+@@ -267,5 +269,30 @@ void QPlatformInputContextPrivate::setInputMethodAccepted(bool accepted)
+     QPlatformInputContextPrivate::s_inputMethodAccepted = accepted;
+ }
+ 
++/*!
++ * \brief QPlatformInputContext::setSelectionOnFocusObject
++ * \param anchorPos Beginning of selection in currently active window coordinates
++ * \param cursorPos End of selection in currently active window coordinates
++ */
++void QPlatformInputContext::setSelectionOnFocusObject(const QPointF &anchorPos, const QPointF &cursorPos)
++{
++    QObject *focus = qApp->focusObject();
++    if (!focus)
++        return;
++
++    QInputMethod *im = QGuiApplication::inputMethod();
++    const QTransform mapToLocal = im->inputItemTransform().inverted();
++    bool success;
++    int anchor = QInputMethod::queryFocusObject(Qt::ImCursorPosition, anchorPos * mapToLocal).toInt(&success);
++    if (success) {
++        int cursor = QInputMethod::queryFocusObject(Qt::ImCursorPosition, cursorPos * mapToLocal).toInt(&success);
++        if (success) {
++            QList<QInputMethodEvent::Attribute> imAttributes;
++            imAttributes.append(QInputMethodEvent::Attribute(QInputMethodEvent::Selection, anchor, cursor - anchor, QVariant()));
++            QInputMethodEvent event(QString(), imAttributes);
++            QGuiApplication::sendEvent(focus, &event);
++        }
++    }
++}
+ 
+ QT_END_NAMESPACE
+diff --git a/src/gui/kernel/qplatforminputcontext.h b/src/gui/kernel/qplatforminputcontext.h
+index 24c6178541..7afa6b82f2 100644
+--- a/src/gui/kernel/qplatforminputcontext.h
++++ b/src/gui/kernel/qplatforminputcontext.h
+@@ -95,6 +95,8 @@ public:
+     virtual void setFocusObject(QObject *object);
+     bool inputMethodAccepted() const;
+ 
++    static void setSelectionOnFocusObject(const QPointF &anchorPos, const QPointF &cursorPos);
++
+ private:
+     friend class QGuiApplication;
+     friend class QGuiApplicationPrivate;
+-- 
+2.11.0
+

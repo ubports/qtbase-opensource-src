@@ -1,0 +1,134 @@
+From dbbb06c2757bdcb7d7c704d33ead730b50141704 Mon Sep 17 00:00:00 2001
+From: Alberto Mardegan <alberto.mardegan@canonical.com>
+Date: Tue, 9 Aug 2016 17:01:37 +0300
+Subject: [PATCH] QDBusServer: delay processing of D-Bus messages
+
+We must ensure that QDBusServer's newConnection() signal has been
+processed by the application, before starting processing messages on it.
+
+Task-number: QTBUG-55087
+Change-Id: I595329b2f98788dbf9f40558b8c230c0c0817ef8
+---
+ src/dbus/qdbusconnection.cpp | 20 --------------------
+ src/dbus/qdbusconnection_p.h | 19 +++++++++++++++++++
+ src/dbus/qdbusintegrator.cpp | 12 ++++++++++++
+ src/dbus/qdbusserver.cpp     |  2 ++
+ 4 files changed, 33 insertions(+), 20 deletions(-)
+
+diff --git a/src/dbus/qdbusconnection.cpp b/src/dbus/qdbusconnection.cpp
+index 7cdacc1..c88cf89 100644
+--- a/src/dbus/qdbusconnection.cpp
++++ b/src/dbus/qdbusconnection.cpp
+@@ -68,24 +68,6 @@ static void preventDllUnload();
+ 
+ Q_GLOBAL_STATIC(QDBusConnectionManager, _q_manager)
+ 
+-// can be replaced with a lambda in Qt 5.7
+-class QDBusConnectionDispatchEnabler : public QObject
+-{
+-    Q_OBJECT
+-    QDBusConnectionPrivate *con;
+-public:
+-    QDBusConnectionDispatchEnabler(QDBusConnectionPrivate *con) : con(con) {}
+-
+-public slots:
+-    void execute()
+-    {
+-        con->setDispatchEnabled(true);
+-        if (!con->ref.deref())
+-            con->deleteLater();
+-        deleteLater();
+-    }
+-};
+-
+ struct QDBusConnectionManager::ConnectionRequestData
+ {
+     enum RequestType {
+@@ -1281,8 +1263,6 @@ QByteArray QDBusConnection::localMachineId()
+ 
+ QT_END_NAMESPACE
+ 
+-#include "qdbusconnection.moc"
+-
+ #ifdef Q_OS_WIN
+ #  include <qt_windows.h>
+ 
+diff --git a/src/dbus/qdbusconnection_p.h b/src/dbus/qdbusconnection_p.h
+index fff9f29..d16cd05 100644
+--- a/src/dbus/qdbusconnection_p.h
++++ b/src/dbus/qdbusconnection_p.h
+@@ -375,6 +375,25 @@ extern QDBusMessage qDBusPropertySet(const QDBusConnectionPrivate::ObjectTreeNod
+                                      const QDBusMessage &msg);
+ extern QDBusMessage qDBusPropertyGetAll(const QDBusConnectionPrivate::ObjectTreeNode &node,
+                                         const QDBusMessage &msg);
++
++// can be replaced with a lambda in Qt 5.7
++class QDBusConnectionDispatchEnabler : public QObject
++{
++    Q_OBJECT
++    QDBusConnectionPrivate *con;
++public:
++    QDBusConnectionDispatchEnabler(QDBusConnectionPrivate *con) : con(con) {}
++
++public slots:
++    void execute()
++    {
++        con->setDispatchEnabled(true);
++        if (!con->ref.deref())
++            con->deleteLater();
++        deleteLater();
++    }
++};
++
+ #endif // QT_BOOTSTRAPPED
+ 
+ QT_END_NAMESPACE
+diff --git a/src/dbus/qdbusintegrator.cpp b/src/dbus/qdbusintegrator.cpp
+index 147966b..878a582 100644
+--- a/src/dbus/qdbusintegrator.cpp
++++ b/src/dbus/qdbusintegrator.cpp
+@@ -309,9 +309,21 @@ static void qDBusNewConnection(DBusServer *server, DBusConnection *connection, v
+     // setPeer does the error handling for us
+     QDBusErrorInternal error;
+     newConnection->setPeer(connection, error);
++    newConnection->setDispatchEnabled(false);
+ 
+     // this is a queued connection and will resume in the QDBusServer's thread
+     emit serverConnection->newServerConnection(newConnection);
++
++    // we've disabled dispatching of events, so now we post an event to the
++    // QDBusServer's thread in order to enable it after the
++    // QDBusServer::newConnection() signal has been received by the
++    // application's code
++    newConnection->ref.ref();
++    QReadLocker serverLock(&serverConnection->lock);
++    QDBusConnectionDispatchEnabler *o = new QDBusConnectionDispatchEnabler(newConnection);
++    QTimer::singleShot(0, o, SLOT(execute()));
++    if (serverConnection->serverObject)
++        o->moveToThread(serverConnection->serverObject->thread());
+ }
+ 
+ void QDBusConnectionPrivate::_q_newConnection(QDBusConnectionPrivate *newConnection)
+diff --git a/src/dbus/qdbusserver.cpp b/src/dbus/qdbusserver.cpp
+index babb270..39d08b4 100644
+--- a/src/dbus/qdbusserver.cpp
++++ b/src/dbus/qdbusserver.cpp
+@@ -97,6 +97,7 @@ QDBusServer::QDBusServer(QObject *parent)
+ */
+ QDBusServer::~QDBusServer()
+ {
++    QWriteLocker locker(&d->lock);
+     if (QDBusConnectionManager::instance()) {
+         QMutexLocker locker(&QDBusConnectionManager::instance()->mutex);
+         Q_FOREACH (const QString &name, d->serverConnectionNames) {
+@@ -104,6 +105,7 @@ QDBusServer::~QDBusServer()
+         }
+         d->serverConnectionNames.clear();
+     }
++    d->serverObject = nullptr;
+     d->ref.store(0);
+     d->deleteLater();
+ }
+-- 
+2.8.1
+

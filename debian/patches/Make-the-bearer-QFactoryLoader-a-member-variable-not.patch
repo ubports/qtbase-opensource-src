@@ -1,0 +1,96 @@
+From 45b484dee691671fc125e418b1f40815a07880ff Mon Sep 17 00:00:00 2001
+From: Thiago Macieira <thiago.macieira@intel.com>
+Date: Tue, 27 Sep 2016 16:52:55 -0700
+Subject: [PATCH] Make the bearer QFactoryLoader a member variable, not a
+ static
+
+Because it was a Q_GLOBAL_STATIC, the QFactoryLoader was getting
+destroyed out-of-sync with the bearer thread stopping. Under normal
+conditions, the thread stopped first (~QApplication / ~QCoreApplication
+via qAddPostRoutine), and the static got destroyed when the process
+exited. However, if QApplication leaked or if the destruction order is
+wonky (as seen in PyQt5), the thread could still be running when the
+plugins were already unloaded.
+
+With the loader a member variable, it gets destroyed when the thread
+stops.
+
+Note: in Qt 5.7, QFactoryLoader no longer unloads the plugins (since
+commit 494376f980e96339b6f1eff7c41336ca4d853065), so this crash cannot
+happen in that version. This commit also revises the fix from commit
+6be65702f8922084c1b8da2ed04b2729340f0a6b that went into 5.7.0.
+
+[ChangeLog][QtNetwork][Bearer management] Fixed a bug that could cause a
+crash on application exit, depending on the order of destruction of the
+QCoreApplication object and the QtDBus manager thread.
+
+Task-number: QTBUG-56228
+Task-number: QTBUG-52988
+Change-Id: I33dc971f005a4848bb8ffffd147853376f82de2a
+---
+ src/network/bearer/qnetworkconfigmanager_p.cpp | 13 ++++---------
+ src/network/bearer/qnetworkconfigmanager_p.h   |  2 ++
+ 2 files changed, 6 insertions(+), 9 deletions(-)
+
+diff --git a/src/network/bearer/qnetworkconfigmanager_p.cpp b/src/network/bearer/qnetworkconfigmanager_p.cpp
+index ccda9dd..dfe15b3 100644
+--- a/src/network/bearer/qnetworkconfigmanager_p.cpp
++++ b/src/network/bearer/qnetworkconfigmanager_p.cpp
+@@ -34,8 +34,6 @@
+ #include "qnetworkconfigmanager_p.h"
+ #include "qbearerplugin_p.h"
+ 
+-#include <QtCore/private/qfactoryloader_p.h>
+-
+ #include <QtCore/qdebug.h>
+ #include <QtCore/qtimer.h>
+ #include <QtCore/qstringlist.h>
+@@ -51,13 +49,10 @@
+ 
+ QT_BEGIN_NAMESPACE
+ 
+-#ifndef QT_NO_LIBRARY
+-Q_GLOBAL_STATIC_WITH_ARGS(QFactoryLoader, loader,
+-                          (QBearerEngineFactoryInterface_iid, QLatin1String("/bearer")))
+-#endif
+-
+ QNetworkConfigurationManagerPrivate::QNetworkConfigurationManagerPrivate()
+-    : QObject(), pollTimer(0), mutex(QMutex::Recursive), forcedPolling(0), firstUpdate(true)
++    : QObject(), pollTimer(0), mutex(QMutex::Recursive),
++      loader(QBearerEngineFactoryInterface_iid, QLatin1String("/bearer")),
++      forcedPolling(0), firstUpdate(true)
+ {
+     qRegisterMetaType<QNetworkConfiguration>();
+     qRegisterMetaType<QNetworkConfigurationPrivatePointer>();
+@@ -382,7 +377,7 @@ void QNetworkConfigurationManagerPrivate::updateConfigurations()
+         bool envOK  = false;
+         const int skipGeneric = qgetenv("QT_EXCLUDE_GENERIC_BEARER").toInt(&envOK);
+         QBearerEngine *generic = 0;
+-        QFactoryLoader *l = loader();
++        QFactoryLoader *l = &loader;
+         const PluginKeyMap keyMap = l->keyMap();
+         const PluginKeyMapConstIterator cend = keyMap.constEnd();
+         QStringList addedEngines;
+diff --git a/src/network/bearer/qnetworkconfigmanager_p.h b/src/network/bearer/qnetworkconfigmanager_p.h
+index 73407d3..5fd6143 100644
+--- a/src/network/bearer/qnetworkconfigmanager_p.h
++++ b/src/network/bearer/qnetworkconfigmanager_p.h
+@@ -48,6 +48,7 @@
+ #include "qnetworkconfigmanager.h"
+ #include "qnetworkconfiguration_p.h"
+ 
++#include <QtCore/private/qfactoryloader_p.h>
+ #include <QtCore/qmutex.h>
+ #include <QtCore/qset.h>
+ 
+@@ -111,6 +112,7 @@ private:
+ private:
+     mutable QMutex mutex;
+ 
++    QFactoryLoader loader;
+     QList<QBearerEngine *> sessionEngines;
+ 
+     QSet<QString> onlineConfigurations;
+-- 
+2.9.3
+

@@ -1,0 +1,45 @@
+From 4aebbef8ab94723d59679f30005b114197c995b9 Mon Sep 17 00:00:00 2001
+From: Andrew Hayzen <ahayzen@gmail.com>
+Date: Tue, 22 Nov 2016 11:55:50 +0000
+Subject: [PATCH] Add support for selecting the printer plugin via the env var
+
+Task-number: QTBUG-57260
+Change-Id: I046c8ce5af242cdc7efd23468bbe670d782bdfc0
+Reviewed-by: Friedemann Kleint <Friedemann.Kleint@qt.io>
+Reviewed-by: Andy Shaw <andy.shaw@qt.io>
+---
+ src/printsupport/kernel/qplatformprintplugin.cpp | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+Index: qtbase-opensource-src-5.6.1+dfsg/src/printsupport/kernel/qplatformprintplugin.cpp
+===================================================================
+--- qtbase-opensource-src-5.6.1+dfsg.orig/src/printsupport/kernel/qplatformprintplugin.cpp
++++ qtbase-opensource-src-5.6.1+dfsg/src/printsupport/kernel/qplatformprintplugin.cpp
+@@ -36,6 +36,7 @@
+ #include "qprinterinfo.h"
+ #include "private/qfactoryloader_p.h"
+ #include <qcoreapplication.h>
++#include <qdebug.h>
+ 
+ QT_BEGIN_NAMESPACE
+ 
+@@ -78,8 +79,17 @@ QPlatformPrinterSupport *QPlatformPrinte
+ #ifndef QT_NO_LIBRARY
+     if (!printerSupport) {
+         const QMultiMap<int, QString> keyMap = loader()->keyMap();
+-        if (!keyMap.isEmpty())
+-            printerSupport = qLoadPlugin<QPlatformPrinterSupport, QPlatformPrinterSupportPlugin>(loader(), keyMap.constBegin().value());
++        QMultiMap<int, QString>::const_iterator it = keyMap.cbegin();
++        if (!qEnvironmentVariableIsEmpty("QT_PRINTER_MODULE")) {
++            QString module = QString::fromLocal8Bit(qgetenv("QT_PRINTER_MODULE"));
++            QMultiMap<int, QString>::const_iterator it2 = std::find_if(keyMap.cbegin(), keyMap.cend(), [module](const QString &value){ return value == module; });
++            if (it2 == keyMap.cend())
++                qWarning() << "Unable to load printer plugin" << module;
++            else
++                it = it2;
++        }
++        if (it != keyMap.cend())
++            printerSupport = qLoadPlugin<QPlatformPrinterSupport, QPlatformPrinterSupportPlugin>(loader(), it.value());
+         if (printerSupport)
+             qAddPostRoutine(cleanupPrinterSupport);
+     }

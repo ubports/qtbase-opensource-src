@@ -1,0 +1,29 @@
+From d1f803af60ce4aec9669aaee775647ff1101cc40 Mon Sep 17 00:00:00 2001
+From: Nikita Krupenko <krnekit@gmail.com>
+Date: Sat, 5 Mar 2016 22:53:47 +0200
+Subject: [PATCH] QPlatformTheme: added EditorFont
+
+Which is needed by Qt Labs Controls.
+
+Task-number: QTBUG-51203
+Change-Id: If5f39d59c5c88de37c9b034b784c38b976759439
+Reviewed-by: J-P Nurmi <jpnurmi@theqtcompany.com>
+---
+ src/gui/kernel/qplatformtheme.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/gui/kernel/qplatformtheme.h b/src/gui/kernel/qplatformtheme.h
+index 77e063f..c4c7482 100644
+--- a/src/gui/kernel/qplatformtheme.h
++++ b/src/gui/kernel/qplatformtheme.h
+@@ -172,6 +172,7 @@ public:
+         FixedFont,
+         GroupBoxTitleFont,
+         TabButtonFont,
++        EditorFont,
+         NFonts
+     };
+ 
+-- 
+2.9.3
+

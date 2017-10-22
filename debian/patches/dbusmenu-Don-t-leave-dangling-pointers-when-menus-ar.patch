@@ -1,0 +1,45 @@
+From 5ca9631d3a0717afb066471ed5eb3b3ed9a9c08a Mon Sep 17 00:00:00 2001
+From: Dmitry Shachnev <mitya57@gmail.com>
+Date: Wed, 7 Sep 2016 17:19:19 +0300
+Subject: [PATCH] =?UTF-8?q?dbusmenu:=20Don=E2=80=99t=20leave=20dangling=20?=
+ =?UTF-8?q?pointers=20when=20menus=20are=20destroyed?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Delete references from menu to its containing item, and vice versa.
+
+Fixes https://launchpad.net/bugs/1620937
+
+Task-number: QTBUG-55966
+Change-Id: I58f0f0a90184bee4b0466c28d91c670a34fa65a5
+Reviewed-by: Shawn Rutledge <shawn.rutledge@qt.io>
+---
+ src/platformsupport/dbusmenu/qdbusplatformmenu.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/platformsupport/dbusmenu/qdbusplatformmenu.cpp b/src/platformsupport/dbusmenu/qdbusplatformmenu.cpp
+index 5c259d5..a5ee52e 100644
+--- a/src/platformsupport/dbusmenu/qdbusplatformmenu.cpp
++++ b/src/platformsupport/dbusmenu/qdbusplatformmenu.cpp
+@@ -60,6 +60,8 @@ QDBusPlatformMenuItem::QDBusPlatformMenuItem(quintptr tag)
+ QDBusPlatformMenuItem::~QDBusPlatformMenuItem()
+ {
+     menuItemsByID.remove(m_dbusID);
++    if (m_subMenu)
++        static_cast<QDBusPlatformMenu *>(m_subMenu)->setContainingMenuItem(Q_NULLPTR);
+ }
+ 
+ void QDBusPlatformMenuItem::setTag(quintptr tag)
+@@ -162,6 +164,8 @@ QDBusPlatformMenu::QDBusPlatformMenu(quintptr tag)
+ 
+ QDBusPlatformMenu::~QDBusPlatformMenu()
+ {
++    if (m_containingMenuItem)
++        m_containingMenuItem->setMenu(Q_NULLPTR);
+ }
+ 
+ void QDBusPlatformMenu::insertMenuItem(QPlatformMenuItem *menuItem, QPlatformMenuItem *before)
+-- 
+2.9.3
+

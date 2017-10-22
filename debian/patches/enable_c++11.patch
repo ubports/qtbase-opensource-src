@@ -1,0 +1,13 @@
+=== modified file 'qmake/Makefile.unix'
+--- a/qmake/Makefile.unix	2017-03-09 07:54:38 +0000
++++ b/qmake/Makefile.unix	2017-03-09 08:14:37 +0000
+@@ -94,7 +94,7 @@
+ 	   $(SOURCE_PATH)/src/corelib/json/qjsonvalue.cpp \
+ 	   $(QTSRCS)
+ 
+-CPPFLAGS = -g $(EXTRA_CPPFLAGS) \
++CPPFLAGS = -g $(EXTRA_CPPFLAGS) -std=c++11 \
+ 	   -I$(QMKSRC) -I$(QMKLIBSRC) -I$(QMKSRC)/generators -I$(QMKSRC)/generators/unix -I$(QMKSRC)/generators/win32 \
+ 	   -I$(QMKSRC)/generators/mac -I$(QMKSRC)/generators/integrity \
+ 	   -I$(INC_PATH) -I$(INC_PATH)/QtCore \
+

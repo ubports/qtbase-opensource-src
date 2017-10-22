@@ -1,0 +1,42 @@
+# Backported from upstream
+no_dbus_dependency.diff
+color-fonts.patch
+fix-scalable-bitmap-factor-caching.patch
+QDBusServer-delay-processing-of-D-Bus-messages.patch
+dbusmenu_exclusive_groups.diff
+qplatformmenubar_createmenu.diff
+dbusmenu_global_menu.diff
+Make-QDBusConnectionPrivate-relaySignal-be-called-in.patch
+Fix-the-GCC-version-supporting-Wsuggest-override.patch
+QtWidgets-Send-show-hide-event-to-children-on-restor.patch
+dbusmenu-Don-t-leave-dangling-pointers-when-menus-ar.patch
+QMenuBar-Get-rid-of-QMenuBarPrivate-nativeMenuBar.patch
+allow_native_menubar.diff
+dbustray_cleanup_notifier.diff
+Merge-the-QDBusMetaType-s-custom-information-to-QDBu.patch
+Fix-some-QtDBus-crashes-during-application-destructi.patch
+Make-the-bearer-QFactoryLoader-a-member-variable-not.patch
+Stop-unloading-plugins-in-QPluginLoader-and-QFactory.patch
+QSettings-Avoid-unneeded-sync-on-destruction.patch
+Add-support-for-selecting-the-printer-plugin-via-the.patch
+qdbus-tray-icon-always-save-icon-in-unity.patch
+qdbus-tray-icon-use-runtimedir.patch
+Add-qAsConst.patch
+QPlatformTheme-added-EditorFont.patch
+Add-support-for-ImhAnchorRectangle.patch
+
+# Debian specific.
+gnukfreebsd.diff
+no_htmlinfo_example.diff
+remove_privacy_breachs.diff
+link_fbclient.diff
+gnukfreebsd_cloexec.diff
+
+# Ubuntu specific.
+qt5-qmake-arm-linux-gnueabihf
+Add-workaround-for-GL-on-Android-emulator.patch
+enable-tests.patch
+skip-largefile-test-s390x.patch
+qnam-ubuntu-fix6.patch
+disable_overlay_scrollbars.diff
+enable_c++11.patch

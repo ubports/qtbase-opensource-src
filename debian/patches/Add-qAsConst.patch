@@ -1,0 +1,65 @@
+From 264c72837d6ff717a248dd180c2dfb45391c6aab Mon Sep 17 00:00:00 2001
+From: Marc Mutz <marc.mutz@kdab.com>
+Date: Wed, 17 Jun 2015 15:59:23 +0200
+Subject: [PATCH] Add qAsConst
+
+...to turn mutable lvalues into const lvalues.
+
+Like the proposed std::as_const, it should not apply to
+rvalues to avoid lifetime issues in code like
+
+     for (auto x : qAsConst(someFunc()))
+         // dangling
+
+At a more basic level, qAsConst isn't useful for rvalues,
+because one can always store them in an lvalue first, with
+no loss in performance (the object is created by the
+compiler silently anyway). So the correct way to write the
+above is:
+
+    const auto funcResult = someFunc();
+    for (auto e : funcResult)
+
+To fail compilation when passing rvalues, I used the
+const-&& pattern also employed by std::cref(), and the
+proposed std::as_const.
+
+Intended as internal API, but not put into the QtPrivate
+namespace to make it simpler to use.
+
+We could wait for std::as_const, but that is far, far
+away (just entered the current C++17 draft as of this
+writing), and the Qt containers with their tendency to
+detach are a problem _now_.
+
+Change-Id: I8824a59d2274de5c5cd642f117212322e4648025
+Reviewed-by: Lars Knoll <lars.knoll@theqtcompany.com>
+---
+ src/corelib/global/qglobal.h | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/corelib/global/qglobal.h b/src/corelib/global/qglobal.h
+index 128d8ab..c84a6b5 100644
+--- a/src/corelib/global/qglobal.h
++++ b/src/corelib/global/qglobal.h
+@@ -1046,8 +1046,17 @@ template <typename T> struct QEnableIf<true, T> { typedef T Type; };
+ 
+ template <bool B, typename T, typename F> struct QConditional { typedef T Type; };
+ template <typename T, typename F> struct QConditional<false, T, F> { typedef F Type; };
++
++template <typename T> struct QAddConst { typedef const T Type; };
+ }
+ 
++// this adds const to non-const objects (like std::as_const)
++template <typename T>
++Q_DECL_CONSTEXPR typename QtPrivate::QAddConst<T>::Type &qAsConst(T &t) Q_DECL_NOTHROW { return t; }
++// prevent rvalue arguments:
++template <typename T>
++void qAsConst(const T &&) Q_DECL_EQ_DELETE;
++
+ QT_END_NAMESPACE
+ 
+ // We need to keep QTypeInfo, QSysInfo, QFlags, qDebug & family in qglobal.h for compatibility with Qt 4.
+-- 
+2.9.3
+

@@ -1,0 +1,96 @@
+Description: add createMenu() method to QPlatformMenuBar
+ The D-Bus platform menus are only useful inside menu bars and system
+ tray icons, and should not be created for other cases (like the context
+ menus).
+ .
+ This adds a new virtual createMenu() method to QPlatformMenuBar class,
+ analogous to the already existing QPlatformSystemTrayIcon::createMenu()
+ method, and adds support for it to QMenuBar.
+Origin: https://code.qt.io/cgit/qt/qtbase.git/commit/?id=e4d79e1fdeb6b26b
+Last-Update: 2016-08-18
+
+--- a/src/gui/kernel/qplatformmenu.h
++++ b/src/gui/kernel/qplatformmenu.h
+@@ -142,6 +142,7 @@
+     virtual void handleReparent(QWindow *newParentWindow) = 0;
+ 
+     virtual QPlatformMenu *menuForTag(quintptr tag) const = 0;
++    virtual QPlatformMenu *createMenu() const { return nullptr; }
+ };
+ 
+ QT_END_NAMESPACE
+--- a/src/widgets/widgets/qmenubar.cpp
++++ b/src/widgets/widgets/qmenubar.cpp
+@@ -1204,12 +1204,19 @@
+         d->setCurrentAction(0);
+ }
+ 
+-QPlatformMenu *getPlatformMenu(QAction *action)
++QPlatformMenu *QMenuBarPrivate::getPlatformMenu(QAction *action)
+ {
+     if (!action || !action->menu())
+         return 0;
+ 
+-    return action->menu()->platformMenu();
++    QPlatformMenu *platformMenu = action->menu()->platformMenu();
++    if (!platformMenu && platformMenuBar) {
++        platformMenu = platformMenuBar->createMenu();
++        if (platformMenu)
++            action->menu()->setPlatformMenu(platformMenu);
++    }
++
++    return platformMenu;
+ }
+ 
+ /*!
+@@ -1230,14 +1237,14 @@
+             return;
+ 
+         if (e->type() == QEvent::ActionAdded) {
+-            QPlatformMenu *menu = getPlatformMenu(e->action());
++            QPlatformMenu *menu = d->getPlatformMenu(e->action());
+             if (menu) {
+                 QPlatformMenu* beforeMenu = NULL;
+                 for (int beforeIndex = d->indexOf(e->action()) + 1;
+                      !beforeMenu && (beforeIndex < actions().size());
+                      ++beforeIndex)
+                 {
+-                    beforeMenu = getPlatformMenu(actions().at(beforeIndex));
++                    beforeMenu = d->getPlatformMenu(actions().at(beforeIndex));
+                 }
+ 
+                 menu->setTag(reinterpret_cast<quintptr>(e->action()));
+@@ -1245,12 +1252,12 @@
+                 d->platformMenuBar->insertMenu(menu, beforeMenu);
+             }
+         } else if (e->type() == QEvent::ActionRemoved) {
+-            QPlatformMenu *menu = getPlatformMenu(e->action());
++            QPlatformMenu *menu = d->getPlatformMenu(e->action());
+             if (menu)
+                 d->platformMenuBar->removeMenu(menu);
+         } else if (e->type() == QEvent::ActionChanged) {
+             QPlatformMenu* cur = d->platformMenuBar->menuForTag(reinterpret_cast<quintptr>(e->action()));
+-            QPlatformMenu *menu = getPlatformMenu(e->action());
++            QPlatformMenu *menu = d->getPlatformMenu(e->action());
+ 
+             // the menu associated with the action can change, need to
+             // remove and/or insert the new platform menu
+@@ -1265,7 +1272,7 @@
+                          !beforeMenu && (beforeIndex < actions().size());
+                          ++beforeIndex)
+                     {
+-                        beforeMenu = getPlatformMenu(actions().at(beforeIndex));
++                        beforeMenu = d->getPlatformMenu(actions().at(beforeIndex));
+                     }
+                     d->platformMenuBar->insertMenu(menu, beforeMenu);
+                 }
+--- a/src/widgets/widgets/qmenubar_p.h
++++ b/src/widgets/widgets/qmenubar_p.h
+@@ -137,6 +137,7 @@
+ 
+     QBasicTimer autoReleaseTimer;
+     QPlatformMenuBar *platformMenuBar;
++    QPlatformMenu *getPlatformMenu(QAction *action);
+ 
+     inline int indexOf(QAction *act) const { return q_func()->actions().indexOf(act); }
+ 

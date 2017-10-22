@@ -1,0 +1,23 @@
+Description: do not set Qt::AA_DontUseNativeMenuBar unconditionally
+ This breaks the global menus on Unity desktop.
+ .
+ Instead of setting it forcefully to false in QGenericUnixTheme, I would
+ prefer to not set this attribute at all in Qt code, to allow application
+ developers to override this attribute if needed.
+Origin: upstream, https://code.qt.io/cgit/qt/qtbase.git/commit/?id=8cd28ea8850c5365
+Last-Update: 2016-09-27
+
+--- a/src/gui/kernel/qguiapplication.cpp
++++ b/src/gui/kernel/qguiapplication.cpp
+@@ -1156,11 +1156,6 @@
+ 
+ void QGuiApplicationPrivate::createPlatformIntegration()
+ {
+-    // Use the Qt menus by default. Platform plugins that
+-    // want to enable a native menu implementation can clear
+-    // this flag.
+-    QCoreApplication::setAttribute(Qt::AA_DontUseNativeMenuBar, true);
+-
+ 
+     QHighDpiScaling::initHighDpiScaling();
+ 

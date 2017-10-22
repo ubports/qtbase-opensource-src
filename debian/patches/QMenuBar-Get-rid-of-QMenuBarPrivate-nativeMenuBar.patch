@@ -1,0 +1,141 @@
+From 835d7cf54328bdd93d58bb64ed96a9c322580aea Mon Sep 17 00:00:00 2001
+From: Dmitry Shachnev <mitya57@gmail.com>
+Date: Wed, 7 Sep 2016 17:37:50 +0300
+Subject: [PATCH] QMenuBar: Get rid of QMenuBarPrivate::nativeMenuBar
+
+Instead of trying to keep that variable in sync with platformMenuBar
+state, just check whether platformMenuBar exists instead.
+
+Now QMenuBar::isNativeMenuBar() is more reliable, and will not return
+true if the QPA plugin provides no platform menu bar.
+
+Also, remove useless restrictions for code using isNativeMenuBar().
+That method is available on all platforms for a long time, not only on
+macOS or WinCE.
+
+This makes sure local menus do not appear if global menus are available,
+and setVisible(true) is called.
+
+Change-Id: I7a5944c64376b4714a38ad981089df8a151c3403
+Task-number: QTBUG-54793
+Reviewed-by: J-P Nurmi <jpnurmi@qt.io>
+Reviewed-by: Shawn Rutledge <shawn.rutledge@qt.io>
+---
+ src/widgets/widgets/qmenubar.cpp | 28 ++++------------------------
+ src/widgets/widgets/qmenubar_p.h |  4 +---
+ 2 files changed, 5 insertions(+), 27 deletions(-)
+
+diff --git a/src/widgets/widgets/qmenubar.cpp b/src/widgets/widgets/qmenubar.cpp
+index d7a8ecd..70e8d98 100644
+--- a/src/widgets/widgets/qmenubar.cpp
++++ b/src/widgets/widgets/qmenubar.cpp
+@@ -1010,13 +1010,11 @@ void QMenuBar::paintEvent(QPaintEvent *e)
+ */
+ void QMenuBar::setVisible(bool visible)
+ {
+-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
+     if (isNativeMenuBar()) {
+         if (!visible)
+             QWidget::setVisible(false);
+         return;
+     }
+-#endif
+     QWidget::setVisible(visible);
+ }
+ 
+@@ -1559,11 +1557,7 @@ QRect QMenuBar::actionGeometry(QAction *act) const
+ QSize QMenuBar::minimumSizeHint() const
+ {
+     Q_D(const QMenuBar);
+-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
+     const bool as_gui_menubar = !isNativeMenuBar();
+-#else
+-    const bool as_gui_menubar = true;
+-#endif
+ 
+     ensurePolished();
+     QSize ret(0, 0);
+@@ -1615,12 +1609,7 @@ QSize QMenuBar::minimumSizeHint() const
+ QSize QMenuBar::sizeHint() const
+ {
+     Q_D(const QMenuBar);
+-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
+     const bool as_gui_menubar = !isNativeMenuBar();
+-#else
+-    const bool as_gui_menubar = true;
+-#endif
+-
+ 
+     ensurePolished();
+     QSize ret(0, 0);
+@@ -1673,11 +1662,7 @@ QSize QMenuBar::sizeHint() const
+ int QMenuBar::heightForWidth(int) const
+ {
+     Q_D(const QMenuBar);
+-#if defined(Q_OS_MAC) || defined(Q_OS_WINCE)
+     const bool as_gui_menubar = !isNativeMenuBar();
+-#else
+-    const bool as_gui_menubar = true;
+-#endif
+ 
+     const_cast<QMenuBarPrivate*>(d)->updateGeometries();
+     int height = 0;
+@@ -1822,10 +1807,8 @@ QWidget *QMenuBar::cornerWidget(Qt::Corner corner) const
+ void QMenuBar::setNativeMenuBar(bool nativeMenuBar)
+ {
+     Q_D(QMenuBar);
+-    if (d->nativeMenuBar == -1 || (nativeMenuBar != bool(d->nativeMenuBar))) {
+-        d->nativeMenuBar = nativeMenuBar;
+-
+-        if (!d->nativeMenuBar) {
++    if (nativeMenuBar != bool(d->platformMenuBar)) {
++        if (!nativeMenuBar) {
+             delete d->platformMenuBar;
+             d->platformMenuBar = 0;
+         } else {
+@@ -1834,7 +1817,7 @@ void QMenuBar::setNativeMenuBar(bool nativeMenuBar)
+         }
+ 
+         updateGeometry();
+-        if (!d->nativeMenuBar && parentWidget())
++        if (!nativeMenuBar && parentWidget())
+             setVisible(true);
+     }
+ }
+@@ -1842,10 +1825,7 @@ void QMenuBar::setNativeMenuBar(bool nativeMenuBar)
+ bool QMenuBar::isNativeMenuBar() const
+ {
+     Q_D(const QMenuBar);
+-    if (d->nativeMenuBar == -1) {
+-        return !QApplication::instance()->testAttribute(Qt::AA_DontUseNativeMenuBar);
+-    }
+-    return d->nativeMenuBar;
++    return bool(d->platformMenuBar);
+ }
+ 
+ /*!
+diff --git a/src/widgets/widgets/qmenubar_p.h b/src/widgets/widgets/qmenubar_p.h
+index 7ef696f..1b19158 100644
+--- a/src/widgets/widgets/qmenubar_p.h
++++ b/src/widgets/widgets/qmenubar_p.h
+@@ -59,7 +59,7 @@ class QMenuBarPrivate : public QWidgetPrivate
+ public:
+     QMenuBarPrivate() : itemsDirty(0), currentAction(0), mouseDown(0),
+                          closePopupMode(0), defaultPopDown(1), popupState(0), keyboardState(0), altPressed(0),
+-                         nativeMenuBar(-1), doChildEffects(false), platformMenuBar(0)
++                         doChildEffects(false), platformMenuBar(0)
+ 
+ #ifdef Q_OS_WINCE
+                          , wce_menubar(0), wceClassicMenu(false)
+@@ -102,8 +102,6 @@ public:
+     uint keyboardState : 1, altPressed : 1;
+     QPointer<QWidget> keyboardFocusWidget;
+ 
+-
+-    int nativeMenuBar : 3;  // Only has values -1, 0, and 1
+     //firing of events
+     void activateAction(QAction *, QAction::ActionEvent);
+ 
+-- 
+2.9.3
+

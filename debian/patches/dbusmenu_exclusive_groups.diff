@@ -1,0 +1,108 @@
+Description: dbusmenu: use proper toggle-type for items that are part of group
+ To achieve that, add a new virtual setHasExclusiveGroup() method to
+ QPlatformMenuItem class (optional because we don't want to break existing
+ platform themes), call it when converting QActions into platform menu items,
+ and use it when exporting the menu items over D-Bus.
+ .
+ Also, send ActionChanged event for actions when their group is changed, so
+ that the platform menus are updated too.
+Origin: https://code.qt.io/cgit/qt/qtbase.git/commit/?id=488cf78e44947eff
+Last-Update: 2016-08-18
+
+--- a/src/gui/kernel/qplatformmenu.h
++++ b/src/gui/kernel/qplatformmenu.h
+@@ -81,6 +81,7 @@
+     virtual void setEnabled(bool enabled) = 0;
+     virtual void setIconSize(int size) = 0;
+     virtual void setNativeContents(WId item) { Q_UNUSED(item); }
++    virtual void setHasExclusiveGroup(bool hasExclusiveGroup) { Q_UNUSED(hasExclusiveGroup); }
+ 
+ Q_SIGNALS:
+     void activated();
+--- a/src/platformsupport/dbusmenu/qdbusmenutypes.cpp
++++ b/src/platformsupport/dbusmenu/qdbusmenutypes.cpp
+@@ -180,9 +180,8 @@
+             m_properties.insert(QLatin1String("children-display"), QLatin1String("submenu"));
+         m_properties.insert(QLatin1String("enabled"), item->isEnabled());
+         if (item->isCheckable()) {
+-            // dbusmenu supports "radio" too, but QPlatformMenuItem doesn't seem to
+-            // (QAction would have an exclusive actionGroup)
+-            m_properties.insert(QLatin1String("toggle-type"), QLatin1String("checkmark"));
++            QString toggleType = item->hasExclusiveGroup() ? QLatin1String("radio") : QLatin1String("checkmark");
++            m_properties.insert(QLatin1String("toggle-type"), toggleType);
+             m_properties.insert(QLatin1String("toggle-state"), item->isChecked() ? 1 : 0);
+         }
+         const QKeySequence &scut = item->shortcut();
+--- a/src/platformsupport/dbusmenu/qdbusplatformmenu.cpp
++++ b/src/platformsupport/dbusmenu/qdbusplatformmenu.cpp
+@@ -53,6 +53,7 @@
+     , m_isCheckable(false)
+     , m_isChecked(false)
+     , m_dbusID(nextDBusID++)
++    , m_hasExclusiveGroup(false)
+ {
+     menuItemsByID.insert(m_dbusID, this);
+ }
+@@ -120,6 +121,11 @@
+     m_isChecked = isChecked;
+ }
+ 
++void QDBusPlatformMenuItem::setHasExclusiveGroup(bool hasExclusiveGroup)
++{
++    m_hasExclusiveGroup = hasExclusiveGroup;
++}
++
+ void QDBusPlatformMenuItem::setShortcut(const QKeySequence &shortcut)
+ {
+     m_shortcut = shortcut;
+--- a/src/platformsupport/dbusmenu/qdbusplatformmenu_p.h
++++ b/src/platformsupport/dbusmenu/qdbusplatformmenu_p.h
+@@ -91,6 +91,8 @@
+     void setCheckable(bool checkable) Q_DECL_OVERRIDE;
+     bool isChecked() const { return m_isChecked; }
+     void setChecked(bool isChecked) Q_DECL_OVERRIDE;
++    bool hasExclusiveGroup() const { return m_hasExclusiveGroup; }
++    void setHasExclusiveGroup(bool hasExclusiveGroup) Q_DECL_OVERRIDE;
+     QKeySequence shortcut() const { return m_shortcut; }
+     void setShortcut(const QKeySequence& shortcut) Q_DECL_OVERRIDE;
+     void setIconSize(int size) Q_DECL_OVERRIDE { Q_UNUSED(size); }
+@@ -117,7 +119,8 @@
+     bool m_isCheckable : 1;
+     bool m_isChecked : 1;
+     int m_dbusID : 16;
+-    int m_reserved : 7;
++    bool m_hasExclusiveGroup : 1;
++    int m_reserved : 6;
+     QKeySequence m_shortcut;
+ };
+ 
+--- a/src/widgets/kernel/qaction.cpp
++++ b/src/widgets/kernel/qaction.cpp
+@@ -606,6 +606,7 @@
+     d->group = group;
+     if(group)
+         group->addAction(this);
++    d->sendDataChanged();
+ }
+ 
+ /*!
+--- a/src/widgets/kernel/qactiongroup.cpp
++++ b/src/widgets/kernel/qactiongroup.cpp
+@@ -190,6 +190,7 @@
+         if (oldGroup)
+             oldGroup->removeAction(a);
+         a->d_func()->group = this;
++        a->d_func()->sendDataChanged();
+     }
+     return a;
+ }
+--- a/src/widgets/widgets/qmenu.cpp
++++ b/src/widgets/widgets/qmenu.cpp
+@@ -3225,6 +3225,7 @@
+     item->setShortcut(action->shortcut());
+     item->setCheckable(action->isCheckable());
+     item->setChecked(action->isChecked());
++    item->setHasExclusiveGroup(action->actionGroup() && action->actionGroup()->isExclusive());
+     item->setFont(action->font());
+     item->setRole((QPlatformMenuItem::MenuRole) action->menuRole());
+     item->setEnabled(action->isEnabled());

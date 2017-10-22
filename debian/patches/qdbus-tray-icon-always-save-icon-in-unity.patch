@@ -1,0 +1,40 @@
+Description: QDBusTrayIcon: always save the temp icon in Unity
+Author: Marco Trevisan <marco.trevisan@canonical.com>
+Bug-Ubuntu: 1600136
+Forwarded: yes
+Applied-Upstream: http://code.qt.io/cgit/qt/qtbase.git/commit/?id=b934572
+
+
+From b934572b30ca64ea0f85dffaeb9ff3c30add1e7e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marco=20Trevisan=20=28Trevi=C3=B1o=29?= <mail@3v1n0.net>
+Date: Fri, 13 Jan 2017 17:40:56 +0100
+Subject: QDBusTrayIcon: always save the temp icon in Unity
+
+We enforce the check of saving the icon when the indicator
+process name isn't available (as we might be running in a
+confined world), but we're running in Unity.
+
+Change-Id: I80d3be1a8c6eba8c391364260746e78cf89a5b98
+Reviewed-by: Dmitry Shachnev <mitya57@gmail.com>
+Reviewed-by: Shawn Rutledge <shawn.rutledge@qt.io>
+---
+ src/platformsupport/dbustray/qdbustrayicon.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+Index: qtbase-opensource-src-5.6.2/src/platformsupport/dbustray/qdbustrayicon.cpp
+===================================================================
+--- qtbase-opensource-src-5.6.2.orig/src/platformsupport/dbustray/qdbustrayicon.cpp
++++ qtbase-opensource-src-5.6.2/src/platformsupport/dbustray/qdbustrayicon.cpp
+@@ -153,6 +153,12 @@ QTemporaryFile *QDBusTrayIcon::tempIcon(
+         uint pid = session.interface()->servicePid(KDEWatcherService).value();
+         QString processName = QLockFilePrivate::processNameByPid(pid);
+         necessary = processName.endsWith(QStringLiteral("indicator-application-service"));
++        if (!necessary && QGuiApplication::desktopSettingsAware()) {
++            // Accessing to process name might be not allowed if the application
++            // is confined, thus we can just rely on the current desktop in use
++            const QPlatformServices *services = QGuiApplicationPrivate::platformIntegration()->services();
++            necessary = services->desktopEnvironment().split(':').contains("UNITY");
++        }
+         necessity_checked = true;
+     }
+     if (!necessary)

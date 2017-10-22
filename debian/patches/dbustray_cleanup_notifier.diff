@@ -1,0 +1,17 @@
+Description: dbustray: delete m_notifier in QDBusTrayIcon::cleanup()
+ This fixes a bug where notificationClosed() and actionInvoked() slots
+ were called more than once, from previous alive notifier instances.
+Origin: upstream, https://code.qt.io/cgit/qt/qtbase.git/commit/?id=63656dbed7bd2b3e
+Last-Update: 2016-09-27
+
+--- a/src/platformsupport/dbustray/qdbustrayicon.cpp
++++ b/src/platformsupport/dbustray/qdbustrayicon.cpp
+@@ -118,6 +118,8 @@
+         dBusConnection()->unregisterTrayIcon(this);
+     delete m_dbusConnection;
+     m_dbusConnection = Q_NULLPTR;
++    delete m_notifier;
++    m_notifier = Q_NULLPTR;
+     m_registered = false;
+ }
+ 

@@ -1,0 +1,14 @@
+Description: Skip largefile test on s390x too, in addition to amd64.
+Author: Dimitri John Ledkov <xnox@ubuntu.com>
+
+--- qtbase-opensource-src-5.5.1+dfsg.orig/tests/auto/corelib/io/largefile/tst_largefile.cpp
++++ qtbase-opensource-src-5.5.1+dfsg/tests/auto/corelib/io/largefile/tst_largefile.cpp
+@@ -511,7 +511,7 @@ void tst_LargeFile::mapOffsetOverflow()
+         uchar *address = 0;
+ 
+         address = largeFile.map(((qint64)1 << i), blockSize);
+-#if defined(__x86_64__)
++#if defined(__x86_64__) || defined(Q_PROCESSOR_S390_X)
+         QEXPECT_FAIL("", "fails on 64-bit Linux (QTBUG-21175)", Abort);
+ #endif
+         QVERIFY( !address );

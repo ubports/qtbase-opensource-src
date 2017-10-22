@@ -1,0 +1,63 @@
+Description: QDBusTrayIcon: try use runtime or cache for icons
+Author: Marco Trevisan <marco.trevisan@canonical.com>
+Bug-Ubuntu: 1600136
+Forwarded: yes
+Applied-Upstream: http://code.qt.io/cgit/qt/qtbase.git/commit/?id=e1c93cc74
+
+
+From e1c93cc74b43d8c49208b38dde824298590ac788 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Marco=20Trevisan=20=28Trevi=C3=B1o=29?= <mail@3v1n0.net>
+Date: Fri, 13 Jan 2017 17:17:14 +0100
+Subject: QDBusTrayIcon: try use runtime or cache for icons
+
+It's better to save icons in $XDG_RUNTIME_DIR or
+$XDG_CACHE_HOME paths than in $TMPDIR as these
+places are readable from the desktop environment
+when an app is ran confined in a sandbox (as in
+snap packages)
+
+Change-Id: I1a3e4c5714f8ea51034d18fb87cead87ed21d6be
+Reviewed-by: Shawn Rutledge <shawn.rutledge@qt.io>
+Reviewed-by: Dmitry Shachnev <mitya57@gmail.com>
+---
+ .../themes/genericunix/dbustray/qdbustrayicon.cpp  | 25 +++++++++++++++++++++-
+ 1 file changed, 24 insertions(+), 1 deletion(-)
+
+Index: qtbase-opensource-src-5.6.2/src/platformsupport/dbustray/qdbustrayicon.cpp
+===================================================================
+--- qtbase-opensource-src-5.6.2.orig/src/platformsupport/dbustray/qdbustrayicon.cpp
++++ qtbase-opensource-src-5.6.2/src/platformsupport/dbustray/qdbustrayicon.cpp
+@@ -58,9 +58,32 @@ QT_BEGIN_NAMESPACE
+ 
+ Q_LOGGING_CATEGORY(qLcTray, "qt.qpa.tray")
+ 
++static QString iconTempPath()
++{
++    QString tempPath = QStandardPaths::writableLocation(QStandardPaths::RuntimeLocation);
++    if (!tempPath.isEmpty())
++        return tempPath;
++
++    tempPath = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation);
++
++    if (!tempPath.isEmpty()) {
++        QDir tempDir(tempPath);
++        if (tempDir.exists())
++            return tempPath;
++
++        if (tempDir.mkpath(QStringLiteral("."))) {
++            const QFile::Permissions permissions = QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner;
++            if (QFile(tempPath).setPermissions(permissions))
++                return tempPath;
++        }
++    }
++
++    return QDir::tempPath();
++}
++
+ static const QString KDEItemFormat = QStringLiteral("org.kde.StatusNotifierItem-%1-%2");
+ static const QString KDEWatcherService = QStringLiteral("org.kde.StatusNotifierWatcher");
+-static const QString TempFileTemplate =  QDir::tempPath() + QStringLiteral("/qt-trayicon-XXXXXX.png");
++static const QString TempFileTemplate = iconTempPath() + QStringLiteral("/qt-trayicon-XXXXXX.png");
+ static const QString XdgNotificationService = QStringLiteral("org.freedesktop.Notifications");
+ static const QString XdgNotificationPath = QStringLiteral("/org/freedesktop/Notifications");
+ static const QString DefaultAction = QStringLiteral("default");
