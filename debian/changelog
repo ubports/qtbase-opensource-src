@@ -1,4 +1,4 @@
-qtbase-opensource-src (5.6.2+dfsg-0ubuntu1~~xenialoverlay5~3) xenial; urgency=medium
+qtbase-opensource-src (5.6.2+dfsg+1ubports1) xenial; urgency=medium
 
   * Add-qAsConst.patch
     QPlatformTheme-added-EditorFont.patch:
